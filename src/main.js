@@ -198,5 +198,5 @@ window.addEventListener('keydown', (event) => {
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code) && ['playing','paused','escape'].includes(mode)) event.preventDefault();
 });
 document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'playing') togglePause(); });
-try { game = createGame(el('scene'), { onReady: ready, onUpdate: update, onEnd: end, onUpgrade: upgrade }); }
+try { game = createGame(el('scene'), { onReady: ready, onUpdate: update, onEnd: end, onUpgrade: upgrade, getHarmony: music.getHarmony }); }
 catch (error) { console.error(error); show('intro', false); show('error-screen', true); el('error-message').textContent = 'The flight renderer could not initialize. Try a browser with WebGL enabled, then reload.'; }

@@ -2,54 +2,60 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ringNotes } from '../src/ring-audio.js';
 
-test('first five rings climb a harmonious phrase',()=>{
-  const pitches=Array.from({length:5},(_,i)=>ringNotes(i+1)[0][0]);
-  assert.deepEqual(pitches,[523.25,587.33,659.25,783.99,880]);
-});
+const harmonies = [[110,130.81,164.81],[87.31,103.83,130.81],[73.42,87.31,110],[82.41,98,123.47]];
+const phrase = (start, harmony) => Array.from({length:5},(_,i)=>ringNotes(start+i,false,harmony)[0][0]);
 
-test('every fifth ring adds a major milestone chord',()=>{
-  for(const combo of [5,10,15,100]){
-    const notes=ringNotes(combo);
-    assert.equal(notes.filter(note=>note[1]===.045).length,3);
-    assert.deepEqual(notes.filter(note=>note[1]===.045).map(note=>note[0]),[523.25,659.25,783.99]);
+test('authored phrases keep changing across short and long streaks',()=>{
+  for(const start of [1,6,11,16,21,26,96,996,9996]) {
+    assert.notDeepEqual(phrase(start,harmonies[0]),phrase(start+5,harmonies[0]));
   }
-  for(const combo of [1,4,6,11,99])assert.equal(ringNotes(combo).filter(note=>note[1]===.045).length,0);
 });
 
-test('long streaks repeat their melody and add only bounded layers',()=>{
-  assert.equal(ringNotes(1)[0][0],ringNotes(6)[0][0]);
-  assert.ok(ringNotes(6).length>ringNotes(1).length);
-  assert.ok(ringNotes(11).length>ringNotes(6).length);
-  for(const combo of [1,5,6,10,11,15,100,999,10000,Number.MAX_SAFE_INTEGER]){
-    const notes=ringNotes(combo,true);
-    assert.ok(notes.length<=8);
-    assert.ok(notes.reduce((sum,note)=>sum+note[3],0)<.08);
-    for(const [frequency,offset,duration,volume] of notes){
-      assert.ok(frequency>=250&&frequency<3200);
-      assert.ok(offset>=0&&offset+duration<.4);
-      assert.ok(volume>0&&volume<=.035);
+test('fundamentals and milestone chords follow each current harmony',()=>{
+  for(const harmony of harmonies) {
+    const pitches=harmony.flatMap(f=>[f*4,f*8]);
+    for(let combo=1;combo<=35;combo++) {
+      const notes=ringNotes(combo,false,harmony);
+      assert.ok(pitches.includes(notes[0][0]));
+      if(combo%5===0) {
+        const cadence=notes.filter(n=>n[1]===.055);
+        assert.equal(cadence.length,3);
+        assert.ok(cadence.every(n=>pitches.includes(n[0])));
+      }
     }
   }
-  assert.deepEqual(ringNotes(16),ringNotes(10001));
+  assert.notDeepEqual(ringNotes(5,false,harmonies[0]),ringNotes(5,false,harmonies[1]));
 });
 
-test('combo reset restores the initial cue without retained streak state',()=>{
-  const first=ringNotes(1);
-  ringNotes(100,true);
-  assert.deepEqual(ringNotes(0),[]);
-  assert.deepEqual(ringNotes(1),first);
-});
-
-test('gold keeps the melody and adds higher quiet bell partials',()=>{
-  for(const combo of [1,5,11,100]){
-    const normal=ringNotes(combo),gold=ringNotes(combo,true);
-    assert.deepEqual(gold.slice(0,normal.length),normal);
-    const accent=gold.slice(normal.length);
-    assert.equal(accent.length,2);
-    assert.ok(accent.every(note=>note[0]>normal[0][0]&&note[3]<normal[0][3]));
+test('streak rewards remain bounded without identical adjacent loops',()=>{
+  assert.ok(ringNotes(11).length>ringNotes(1).length);
+  assert.ok(ringNotes(20).some(n=>n[1]>=.14));
+  for(const harmony of harmonies)for(const combo of [1,5,6,10,11,15,20,100,999,10000,Number.MAX_SAFE_INTEGER]) {
+    const notes=ringNotes(combo,true,harmony);
+    assert.ok(notes.length<=11);
+    assert.ok(notes.reduce((sum,n)=>sum+n[3],0)<.06);
+    for(const [frequency,offset,duration,volume] of notes) {
+      assert.ok(frequency>=140&&frequency<3200);
+      assert.ok(offset>=0&&offset+duration<=.65);
+      assert.ok(volume>0&&volume<=.02);
+    }
   }
 });
 
-test('invalid combos are silent',()=>{
-  for(const combo of [-1,NaN,Infinity,undefined])assert.deepEqual(ringNotes(combo),[]);
+test('reset restores the first cue and gold has a quiet distinct accent',()=>{
+  const first=ringNotes(1,false,harmonies[1]);
+  ringNotes(100,true,harmonies[0]);
+  assert.deepEqual(ringNotes(1,false,harmonies[1]),first);
+  for(const combo of [1,5,11,20,100]) {
+    const normal=ringNotes(combo),gold=ringNotes(combo,true);
+    assert.deepEqual(gold.slice(0,normal.length),normal);
+    assert.equal(gold.length-normal.length,2);
+  }
+});
+
+test('invalid combos are silent and unavailable harmony uses a safe default',()=>{
+  for(const combo of [0,-1,NaN,Infinity,undefined])assert.deepEqual(ringNotes(combo),[]);
+  for(const harmony of [null,[],[NaN,1,2],[1,2,3],[Infinity,200,300]]) {
+    assert.deepEqual(ringNotes(1,false,harmony),ringNotes(1));
+  }
 });

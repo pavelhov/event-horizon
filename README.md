@@ -39,6 +39,8 @@ The spacecraft and ruins are generated using Blender. Rebuild them with `scripts
 
 The soundtrack, engine and effects are synthesized with WebAudio. No accounts, backend or paid services are required.
 
+Ring melodies follow the soundtrack's current chord. Streaks develop through different musical phrases, with richer harmonies and milestone flourishes; gold rings add a brighter bell accent. A missed ring or damage restarts the phrase, while sector-clear cues take priority.
+
 ## Production build
 
 ```sh

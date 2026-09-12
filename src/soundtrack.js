@@ -27,9 +27,24 @@ export function createSoundtrack() {
   let level = 1;
 
   let chordIndex = 0;
+  let soundingChord = CHORDS[0];
+  let pendingChord = null;
   let beat = 0;
   let timers = [];
   let voices = [];
+
+  function getHarmony() {
+    if (pendingChord && ctx && ctx.currentTime >= pendingChord.at) {
+      soundingChord = pendingChord.chord;
+      pendingChord = null;
+    }
+    return [...soundingChord.pad];
+  }
+
+  function cancelPendingHarmony() {
+    getHarmony(); // Retain any chord whose scheduled start has already sounded.
+    pendingChord = null;
+  }
 
   function clampLevel(value) {
     const n = Number(value);
@@ -237,6 +252,8 @@ export function createSoundtrack() {
     const bar = (beatInterval() / 1000) * 4;
     const padDuration = bar * (3.6 + (level >= 4 ? 0.4 : 0));
 
+    getHarmony();
+    pendingChord = { chord, at: now };
     playPad(chord, now, padDuration);
 
     if (beat % 2 === 0) {
@@ -265,6 +282,7 @@ export function createSoundtrack() {
   }
 
   function haltPlayback(fade = 0.35) {
+    cancelPendingHarmony();
     clearTimers();
     stopVoices(fade);
     rampMaster(0, fade);
@@ -308,6 +326,8 @@ export function createSoundtrack() {
     finished = false;
     paused = false;
     chordIndex = 0;
+    soundingChord = CHORDS[0];
+    pendingChord = null;
     beat = 0;
 
     clearTimers();
@@ -364,12 +384,14 @@ export function createSoundtrack() {
   function finish(win = false) {
     if (!running) return;
     finished = true;
+    cancelPendingHarmony();
     clearTimers();
     stopVoices(0.1);
     playFinish(!!win);
   }
 
   return {
+    getHarmony,
     start,
     pause,
     resume,

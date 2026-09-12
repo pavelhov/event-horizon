@@ -189,6 +189,7 @@ export function createGame(canvas, callbacks = {}) {
   }
   function beginEscape(){
     if(state.phase==='escape'||state.ended)return;
+    silenceCelebration();
     Object.assign(state,progressionForScore(CAMPAIGN_TARGET-1),{progress:1});state.phase='escape';mouseBoostHeld=false;state.paused=false;state.escapeProgress=0;pointerActive=false;
     invincible=6;state.boost=1;state.lastEvent='escape';state.eventTime=time;
     levelPulse=2;sound(180,'sine',2,.1);sound(720,'triangle',2,.025);publish();
@@ -214,6 +215,7 @@ export function createGame(canvas, callbacks = {}) {
     if(state.phase!=='playing'||!state.running||invincible>0||obstacle.userData.hit)return false;
     obstacle.userData.hit=true;obstacle.visible=false;
     state.shield=Math.max(0,state.shield-1);state.hits++;state.combo=0;invincible=1.05;shake=.85;
+    silenceCelebration();
     state.lastEvent='hit';state.eventTime=time;
     burst(ship.position,0xff5935);sound(55,'sawtooth',.5,.14);publish();
     if(state.shield===0)end(false);
@@ -259,6 +261,7 @@ export function createGame(canvas, callbacks = {}) {
     }catch{}
   }
   function sectorClearSound(){
+    silenceCelebration();
     // C5–E5–G5–C6 ascends into a soft C-major resolution; no falling pitch.
     positiveCue([
       [523.25,0,.24,.025],[659.25,.13,.24,.025],
@@ -267,6 +270,7 @@ export function createGame(canvas, callbacks = {}) {
     ]);
   }
   function upgradeInstallSound(){
+    silenceCelebration();
     positiveCue([[659.25,0,.16,.022],[783.99,.075,.18,.023],[1046.5,.15,.23,.024]]);
   }
   function silenceCelebration(){
@@ -278,7 +282,7 @@ export function createGame(canvas, callbacks = {}) {
   function silenceEngine(){if(engineGain)engineGain.gain.setTargetAtTime(0,audio.currentTime,.08);}
   function sound(freq,type='sine',duration=.15,volume=.06){if(state.muted)return;try{audio ||= new (window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')audio.resume();const o=audio.createOscillator(),g=audio.createGain();o.type=type;o.frequency.setValueAtTime(freq,audio.currentTime);o.frequency.exponentialRampToValueAtTime(freq*.45,audio.currentTime+duration);g.gain.setValueAtTime(volume,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+duration);o.connect(g).connect(audio.destination);o.start();o.stop(audio.currentTime+duration);}catch{}}
   function end(win=false){
-    if(state.ended)return;mouseBoostHeld=false;silenceEngine();state.running=false;state.paused=false;state.ended=true;state.phase='ended';
+    if(state.ended)return;mouseBoostHeld=false;silenceEngine();silenceCelebration();state.running=false;state.paused=false;state.ended=true;state.phase='ended';
     let best=state.score;try{best=Math.max(state.score,Number(localStorage.getItem('event-horizon-best')||0));localStorage.setItem('event-horizon-best',best);}catch{}
     const accuracy=state.gates/Math.max(1,state.gates+state.gatesMissed);
     const rank=win&&state.hits<=2&&accuracy>=.85?'S':win&&state.hits<=5?'A':win||state.level>=4?'B':'C';
@@ -286,6 +290,7 @@ export function createGame(canvas, callbacks = {}) {
     window.__game.lastSummary=summary;publish();callbacks.onEnd?.(summary);
   }
   function start(options={}){
+    silenceCelebration();
     mouseBoostHeld=false;
     ensureEngine();Object.assign(state,{runId:globalThis.crypto?.randomUUID?.()||`run-${Date.now()}-${Math.random()}`,running:true,paused:false,ended:false,phase:'playing',mode:options.mode==='endless'?'endless':'campaign',score:0,speed:310,combo:0,shield:3,maxShield:3,hits:0,maxCombo:0,gatesMissed:0,upgrades:{armor:0,reactor:0,bounty:0},scoreMultiplier:1,escapeProgress:0,boost:1,gates:0,distance:0,elapsed:0,levelEvent:0,levelReward:'',lastEvent:null,eventTime:0},progressionForScore(0));
     pendingUpgrades=0;lastHullWarning=-10;paletteTarget.set(state.color);gateMat.color.set(state.color);gateMat.emissive.set(state.color);levelPulse=0;
@@ -371,10 +376,10 @@ flames.forEach(f=>{f.scale.y=(boosting?2.2:1)+Math.random()*.25;});
           publish();updateProgression();
           burst(new THREE.Vector3(ship.position.x,ship.position.y,-1),g.userData.bonus?0xffce55:state.color);
           // Sector/escape cues take priority, even after all upgrades are owned.
-          if(state.phase==='playing'&&state.level===previousLevel)positiveCue(ringNotes(state.combo,g.userData.bonus));
+          if(state.phase==='playing'&&state.level===previousLevel)positiveCue(ringNotes(state.combo,g.userData.bonus,callbacks.getHarmony?.()));
         }else if(g.position.z>ship.position.z+gateDepthGrace){
           // A near miss can still be rescued until the gate has fully passed.
-          g.userData.passed=true;state.combo=0;state.gatesMissed++;publish();
+          g.userData.passed=true;state.combo=0;state.gatesMissed++;silenceCelebration();publish();
         }
       }
       if(g.position.z>22){
@@ -409,8 +414,8 @@ flames.forEach(f=>{f.scale.y=(boosting?2.2:1)+Math.random()*.25;});
     bloom.strength=THREE.MathUtils.lerp(bloom.strength,(escaping?1.3+state.escapeProgress*1.5:boosting?1.05:.8)+levelPulse*.2,dt*3);stars.rotation.z=time*.002;
     if(time-lastUI>.09){publish();lastUI=time;}composer.render();if(escaping&&state.escapeProgress>=1)end(true);
   }
-  function returnToMenu(){mouseBoostHeld=false;state.running=false;state.paused=false;state.ended=false;state.phase='intro';ship.position.set(0,0,2);pointerActive=false;invincible=0;renderer.toneMappingExposure=1.15;silenceEngine();publish();}
-  const api={start,chooseUpgrade,returnToMenu,pause(){mouseBoostHeld=false;if(state.phase!=='playing')return;state.paused=true;silenceEngine();publish();},resume(){if(state.phase!=='playing')return;state.paused=false;clock.getDelta();publish();},setMuted(value){state.muted=!!value;if(state.muted){silenceEngine();silenceCelebration();}}};
+  function returnToMenu(){mouseBoostHeld=false;state.running=false;state.paused=false;state.ended=false;state.phase='intro';ship.position.set(0,0,2);pointerActive=false;invincible=0;renderer.toneMappingExposure=1.15;silenceEngine();silenceCelebration();publish();}
+  const api={start,chooseUpgrade,returnToMenu,pause(){mouseBoostHeld=false;if(state.phase!=='playing')return;state.paused=true;silenceEngine();silenceCelebration();publish();},resume(){if(state.phase!=='playing')return;state.paused=false;clock.getDelta();publish();},setMuted(value){state.muted=!!value;if(state.muted){silenceEngine();silenceCelebration();}}};
   window.__game.api=api;window.__game.sweptSolidContact=sweptSolidContact;window.__game.damage=damage;
   tick();callbacks.onReady?.();
   return api;
