@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { progressionForScore, levelStart, CAMPAIGN_TARGET, streakMultiplier, gateScore } from './progression.js';
 import { sweptSolidContact } from './collision.js';
+import { ringNotes } from './ring-audio.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -366,8 +367,11 @@ flames.forEach(f=>{f.scale.y=(boosting?2.2:1)+Math.random()*.25;});
           g.userData.passed=true;
           g.visible=false;state.combo++;state.maxCombo=Math.max(state.maxCombo,state.combo);state.gates++;state.lastEvent=g.userData.bonus?"bonus":"gate";state.eventTime=time;
           state.score+=gateScore({combo:state.combo,boosted:boosting,bonus:g.userData.bonus,scoreMultiplier:state.scoreMultiplier});
+          const previousLevel=state.level;
           publish();updateProgression();
-          burst(new THREE.Vector3(ship.position.x,ship.position.y,-1),g.userData.bonus?0xffce55:state.color);if(state.phase==='playing')sound(360+state.combo*50,'sine',.2);
+          burst(new THREE.Vector3(ship.position.x,ship.position.y,-1),g.userData.bonus?0xffce55:state.color);
+          // Sector/escape cues take priority, even after all upgrades are owned.
+          if(state.phase==='playing'&&state.level===previousLevel)positiveCue(ringNotes(state.combo,g.userData.bonus));
         }else if(g.position.z>ship.position.z+gateDepthGrace){
           // A near miss can still be rescued until the gate has fully passed.
           g.userData.passed=true;state.combo=0;state.gatesMissed++;publish();
