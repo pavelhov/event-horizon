@@ -29,6 +29,8 @@ export function createGame(canvas, callbacks = {}) {
   window.__game = { state, scene, renderer, camera, progressionForScore, levelStart };
   let targetX = 0, targetY = 0, time = 0, invincible = 0, shake = 0, lastUI = 0;
   let pointerActive = false;
+  let tiltMode = false;
+  const tiltNDC = new THREE.Vector2();
   let mouseBoostHeld = false;
   const pointerClient = new THREE.Vector2(), pointerNDC = new THREE.Vector2();
   const pointerRay = new THREE.Raycaster();
@@ -40,6 +42,7 @@ export function createGame(canvas, callbacks = {}) {
       1 - (pointerClient.y - rect.top) / rect.height * 2);
   }
   function trackPointer(e) {
+    if (tiltMode && e.pointerType === 'touch') return;
     if(e.pointerType !== 'touch' && !(e.buttons & 1)) mouseBoostHeld=false;
     if (state.phase !== 'playing' || !state.running || state.paused || (e.pointerType === 'touch' && !e.buttons)) return;
     const rect = canvas.getBoundingClientRect();
@@ -55,7 +58,7 @@ export function createGame(canvas, callbacks = {}) {
   window.addEventListener('pointermove', trackPointer);
   canvas.addEventListener('pointerdown', e => {
     trackPointer(e);
-    if(e.button===0 && e.pointerType!=='touch' && state.phase==='playing' && state.running && !state.paused) mouseBoostHeld=true;
+    if(e.button===0 && (e.pointerType!=='touch' || tiltMode) && state.phase==='playing' && state.running && !state.paused) mouseBoostHeld=true;
   });
   window.addEventListener('pointerup', e => {if(e.button===0)mouseBoostHeld=false;});
   canvas.addEventListener('pointercancel', () => {mouseBoostHeld=false;});
@@ -313,16 +316,18 @@ export function createGame(canvas, callbacks = {}) {
     if(state.phase==='playing')updateProgression();
     if(state.paused)return;
     previousShipPosition.copy(ship.position);
+    let keyboardSteering=false;
     const escaping=state.phase==='escape';const active=state.running&&state.phase==='playing';const boosting=active&&(keys.Space||mouseBoostHeld)&&state.boost>.01;const velocity=escaping?180+state.escapeProgress*400:active?(state.baseSpeed)*(boosting?1.75:1):13;
     state.speed=active?Math.round(velocity*5):0;
     if(engineGain){engineGain.gain.setTargetAtTime((active||escaping)&&!state.muted?(escaping?.045:boosting?.035:.02):0,audio.currentTime,.12);engineOsc.frequency.setTargetAtTime(escaping?100+state.escapeProgress*100:boosting?82:49+Math.min(state.level,10)*2,audio.currentTime,.2);engineSub.frequency.setTargetAtTime(boosting?51:36.7,audio.currentTime,.2);}
     if(active){state.elapsed+=dt;state.distance+=velocity*dt;state.boost=THREE.MathUtils.clamp(state.boost+(boosting?-.31:.14*(1+.25*state.upgrades.reactor))*dt,0,1);invincible=Math.max(0,invincible-dt);
       const keyX=(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0),keyY=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0);
-      if(keyX||keyY){
+      keyboardSteering=!!(keyX||keyY);
+      if(keyboardSteering){
         if(pointerActive){targetX=ship.position.x;targetY=ship.position.y;}
         pointerActive=false;targetX+=keyX*15*dt;targetY+=keyY*12*dt;
       }
-      if(!pointerActive){
+      if(!pointerActive && (!tiltMode || keyboardSteering)){
         targetX=THREE.MathUtils.clamp(targetX,-10,10);targetY=THREE.MathUtils.clamp(targetY,-5.8,5.8);
         const dx=targetX-ship.position.x;
         ship.position.x+=dx*(1-Math.exp(-8*dt));ship.position.y+=(targetY-ship.position.y)*(1-Math.exp(-8*dt));
@@ -331,7 +336,7 @@ export function createGame(canvas, callbacks = {}) {
     } else if(state.phase==='intro'){ship.position.x=Math.sin(time*.45)*1.4;ship.position.y=Math.sin(time*.8)*.45;ship.rotation.z=Math.cos(time*.45)*-.12;}
     // Finalize the camera before projection and collision checks. In pointer mode
     // the camera follows a neutral anchor, so steering cannot move its own target.
-    const mouseSteering=active&&pointerActive;
+    const mouseSteering=active&&!keyboardSteering&&(pointerActive||tiltMode);
     const cameraAnchorX=mouseSteering?0:ship.position.x;
     const cameraAnchorY=mouseSteering?0:ship.position.y;
     shake=Math.max(0,shake-dt);
@@ -344,7 +349,8 @@ export function createGame(canvas, callbacks = {}) {
     camera.fov=THREE.MathUtils.lerp(camera.fov,boosting?78:66,dt*4);
     camera.updateProjectionMatrix();camera.updateMatrixWorld(true);
     if(mouseSteering){
-      updatePointerNDC();
+      if (tiltMode && !pointerActive) pointerNDC.copy(tiltNDC);
+      else updatePointerNDC();
       pointerRay.setFromCamera(pointerNDC,camera);
       steeringPlane.constant=-ship.position.z;
       if(pointerRay.ray.intersectPlane(steeringPlane,pointerHit)){
@@ -420,7 +426,7 @@ flames.forEach(f=>{f.scale.y=(boosting?2.2:1)+Math.random()*.25;});
     if(time-lastUI>.09){publish();lastUI=time;}composer.render();if(escaping&&state.escapeProgress>=1)end(true);
   }
   function returnToMenu(){mouseBoostHeld=false;state.running=false;state.paused=false;state.ended=false;state.phase='intro';ship.position.set(0,0,2);pointerActive=false;invincible=0;renderer.toneMappingExposure=1.15;silenceEngine();silenceCelebration();publish();}
-  const api={start,chooseUpgrade,returnToMenu,pause(){mouseBoostHeld=false;if(state.phase!=='playing')return;state.paused=true;silenceEngine();silenceCelebration();publish();},resume(){if(state.phase!=='playing')return;state.paused=false;clock.getDelta();publish();},setMuted(value){state.muted=!!value;if(state.muted){silenceEngine();silenceCelebration();}}};
+  const api={start,chooseUpgrade,returnToMenu,setTiltMode(value){tiltMode=!!value;pointerActive=false;mouseBoostHeld=false;tiltNDC.set(0,0);},setTiltInput(x,y){if(!Number.isFinite(x)||!Number.isFinite(y))return;tiltNDC.set(THREE.MathUtils.clamp(x,-1,1),THREE.MathUtils.clamp(y,-1,1));},pause(){mouseBoostHeld=false;if(state.phase!=='playing')return;state.paused=true;silenceEngine();silenceCelebration();publish();},resume(){if(state.phase!=='playing')return;state.paused=false;clock.getDelta();publish();},setMuted(value){state.muted=!!value;if(state.muted){silenceEngine();silenceCelebration();}}};
   window.__game.api=api;window.__game.sweptSolidContact=sweptSolidContact;window.__game.damage=damage;
   tick();callbacks.onReady?.();
   return api;

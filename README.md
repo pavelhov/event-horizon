@@ -24,6 +24,10 @@ Open http://localhost:5187 in a desktop browser with WebGL. On macOS, you can al
 - Hold left mouse button or Space: boost
 - Escape: pause
 - Enter: launch / retry
+- Phone: drag to steer, or choose **Tilt** before launch or while paused.
+- Tilt mode: hold the phone comfortably to calibrate, tilt to steer, and hold the screen to boost. **Recenter** in the menu or pause screen resets neutral.
+
+Tilt is opt-in and requires usable motion sensors and a secure connection. Motion permission is requested only when selecting Tilt. If permission is denied or readings are unavailable, Touch remains available. Sensor loss during flight pauses the game and returns to Touch. Rotating the phone recalibrates the neutral position.
 
 ## The run
 

@@ -3,6 +3,7 @@ import { createGame } from './game.js';
 import { levelStart } from './progression.js';
 import { loadProfile, recordRun } from './profile.js';
 import { createSoundtrack } from './soundtrack.js';
+import { createTiltControls } from './tilt-controls.js';
 const music = createSoundtrack();
 
 const el = (id) => document.getElementById(id);
@@ -10,6 +11,52 @@ let mode = 'loading', selectedMode = 'campaign', muted = false, game;
 let lastEventTime = null, lastScore = 0, lastLevelEvent = null, startingFlight = false, recorded = false;
 let hullMaximum = 0, currentPhase = 'intro', choosingUpgrade = false, upgradeGeneration = 0;
 let profile = loadProfile();
+const touchDevice = navigator.maxTouchPoints > 0 || matchMedia('(any-pointer: coarse)').matches;
+document.body.classList.toggle('touch-controls', touchDevice);
+let steeringStatus = 'touch';
+const tilt = createTiltControls({
+  onChange: renderSteering,
+  onSteer: (x, y) => game?.setTiltInput(x, y),
+});
+function renderSteering(state) {
+  if (steeringStatus === 'active' && state.status === 'touch' && mode === 'playing') {
+    game?.pause(); music.pause(); setMode('paused');
+  }
+  steeringStatus = state.status;
+  const active = state.status === 'active', pending = state.status === 'requesting';
+  game?.setTiltMode(active);
+  for (const panel of document.querySelectorAll('.steering-settings')) {
+    panel.classList.toggle('hidden', !touchDevice);
+    panel.querySelector('[data-steering="touch"]').setAttribute('aria-pressed', String(!active && !pending));
+    const button = panel.querySelector('[data-steering="tilt"]');
+    button.setAttribute('aria-pressed', String(active));
+    button.disabled = pending || !state.supported;
+    button.textContent = pending ? 'CHECKING…' : 'TILT';
+    panel.querySelector('[data-recenter]').classList.toggle('hidden', !active);
+    panel.querySelector('.steering-status').textContent = state.message || (active ? 'Tilt to steer · Hold the screen to boost.' : 'Drag to steer.');
+  }
+  if (touchDevice) {
+    el('steering-tutorial').textContent = active ? 'TILT TO STEER · HOLD THE SCREEN TO BOOST' : 'DRAG TO STEER';
+    document.querySelector('.controls').textContent = active ? 'TILT TO STEER · HOLD TO BOOST · TAP PAUSE FOR RECENTER' : 'DRAG TO STEER · TAP PAUSE FOR CONTROLS';
+    document.querySelector('.boost-label span:last-child').textContent = active ? 'HOLD SCREEN' : 'TILT: HOLD SCREEN';
+    document.querySelector('#intro .enter-hint').textContent = 'TAP TO LAUNCH';
+  }
+  // Keep launch/resume in the menu until the sensor check completes.
+  el('start').disabled = pending || mode === 'loading';
+  el('resume').disabled = pending;
+}
+for (const button of document.querySelectorAll('[data-steering]')) {
+  button.addEventListener('click', () => {
+    if (button.dataset.steering === 'tilt') void tilt.enable();
+    else tilt.disable();
+  });
+}
+for (const button of document.querySelectorAll('[data-recenter]')) {
+  button.addEventListener('click', () => {
+    if (tilt.recenter()) for (const status of document.querySelectorAll('.steering-status')) status.textContent = 'Centered. This holding position is now neutral.';
+  });
+}
+renderSteering(tilt.getState());
 function show(id, visible) { el(id).classList.toggle('hidden', !visible); }
 function setMode(next) {
   mode = next;
@@ -41,7 +88,8 @@ function clearPresentation() {
   el('score').classList.remove('score-pop');
 }
 function launch(value = selectedMode) {
-  if (!game || mode === 'loading') return;
+  if (!game || mode === 'loading' || steeringStatus === 'requesting') return;
+  if (steeringStatus === 'active') tilt.recenter();
   selectMode(typeof value === 'string' ? value : selectedMode);
   lastScore = 0; lastEventTime = null; lastLevelEvent = null; recorded = false;
   currentPhase = 'playing'; hullMaximum = 0; clearPresentation();
@@ -57,7 +105,7 @@ function launch(value = selectedMode) {
 function togglePause() {
   if (currentPhase !== 'playing') return;
   if (mode === 'playing') { game.pause(); music.pause(); setMode('paused'); }
-  else if (mode === 'paused') { game.resume(); music.resume(); setMode('playing'); }
+  else if (mode === 'paused' && steeringStatus !== 'requesting') { if (steeringStatus === 'active') tilt.recenter(); game.resume(); music.resume(); setMode('playing'); }
 }
 function normalized(value, fallback=1) {
   const number = Number(value);
@@ -173,7 +221,7 @@ function end(data = {}) {
   show('new-record', score > oldBest);
   setMode('ended');
 }
-function ready() { setMode('intro'); el('start').disabled = false; el('start-label').textContent = 'ENTER THE VOID'; refreshRecords(); }
+function ready() { setMode('intro'); renderSteering(tilt.getState()); el('start-label').textContent = 'ENTER THE VOID'; refreshRecords(); }
 el('start').addEventListener('click', () => launch());
 el('retry').addEventListener('click', () => launch('campaign'));
 el('play-endless').addEventListener('click', () => launch('endless'));
