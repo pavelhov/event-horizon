@@ -2,14 +2,16 @@ import * as THREE from 'three';
 import { progressionForScore, levelStart, CAMPAIGN_TARGET, streakMultiplier, gateScore } from './progression.js';
 import { sweptSolidContact } from './collision.js';
 import { ringNotes } from './ring-audio.js';
+import { createRenderSizeSync } from './render-size.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 export function createGame(canvas, callbacks = {}) {
+  // Keep layout independent of the drawing buffer even before external CSS loads.
+  Object.assign(canvas.style, { position: 'fixed', inset: '0', width: '100%', height: '100%', display: 'block' });
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.7));
   renderer.setClearColor(0x02050c);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.15;
@@ -303,8 +305,11 @@ export function createGame(canvas, callbacks = {}) {
     for(const p of particles){scene.remove(p.mesh);p.mesh.material.dispose();}particles.length=0;
     window.__game.lastSummary=null;sound(160,'sine',.6);publish();
   }
-  function resize(){const w=canvas.clientWidth||innerWidth,h=canvas.clientHeight||innerHeight;renderer.setSize(w,h,false);composer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();if(pointerActive)updatePointerNDC();updateGateBounds();}window.addEventListener('resize',resize);resize();
-  function tick(){requestAnimationFrame(tick);const dt=Math.min(clock.getDelta(),.04);if(state.paused)return;time+=dt;holeUniforms.uTime.value=time;
+  const syncRenderSize = createRenderSizeSync(canvas, renderer, composer, camera, window, () => {
+    if (pointerActive) updatePointerNDC();
+    updateGateBounds();
+  });
+  function tick(){requestAnimationFrame(tick);syncRenderSize();const dt=Math.min(clock.getDelta(),.04);if(state.paused)return;time+=dt;holeUniforms.uTime.value=time;
     if(state.phase==='playing')updateProgression();
     if(state.paused)return;
     previousShipPosition.copy(ship.position);
