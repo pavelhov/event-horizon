@@ -32,3 +32,8 @@
 svg.button-arrow{display:block;width:24px;height:24px;flex:0 0 24px}
 .touch-controls .launch-block{width:min(100%,360px);min-width:0}
 .touch-controls .launch-block>.mode-picker,.touch-controls .launch-block>.steering-settings,.touch-controls .launch-block>.primary-button{width:100%;min-width:0}
+
+.steering-picker button.retry-available{color:var(--cream);border-color:#ffffff65}
+.motion-help{margin-top:10px;font-size:11px;line-height:1.6;color:#c5d1d3}
+.motion-help summary{cursor:pointer;color:var(--cyan);padding:8px 0;text-decoration:underline;text-underline-offset:3px}
+.steering-settings .motion-help p{font-size:11px;line-height:1.6;margin:8px 0;color:#c5d1d3}

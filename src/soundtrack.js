@@ -23,6 +23,8 @@ export function createSoundtrack() {
   let running = false;
   let paused = false;
   let muted = false;
+  let audioHidden = false;
+  let audioLocked = false;
   let finished = false;
   let level = 1;
 
@@ -54,7 +56,9 @@ export function createSoundtrack() {
 
   function safe(run) {
     try {
-      return run();
+      const result = run();
+      result?.catch?.(() => {});
+      return result;
     } catch {
       return undefined;
     }
@@ -100,7 +104,7 @@ export function createSoundtrack() {
   }
 
   function masterTarget() {
-    if (muted || paused || finished || !running) return 0;
+    if (muted || audioHidden || audioLocked || paused || finished || !running) return 0;
     return 0.038 + (level - 1) * 0.007;
   }
 
@@ -121,6 +125,7 @@ export function createSoundtrack() {
   }
 
   function ensureContext() {
+    if (muted || audioHidden || audioLocked) return null;
     if (ctx) return ctx;
     const AudioCtx = typeof window !== 'undefined'
       ? (window.AudioContext || window.webkitAudioContext)
@@ -164,12 +169,12 @@ export function createSoundtrack() {
   }
 
   function resumeContext() {
-    if (!ctx) return;
-    if (ctx.state === 'suspended') safe(() => ctx.resume());
+    if (!ctx || muted || audioHidden || audioLocked) return;
+    if (ctx.state === 'suspended' || ctx.state === 'interrupted') safe(() => ctx.resume());
   }
 
   function shouldPlay() {
-    return running && !paused && !finished && !muted && !!ctx;
+    return running && !paused && !finished && !muted && !audioHidden && !audioLocked && !!ctx;
   }
 
   function playPad(chord, start, duration) {
@@ -289,12 +294,11 @@ export function createSoundtrack() {
   }
 
   function playFinish(win) {
-    if (!ctx || muted) {
+    if (!ctx || muted || audioHidden || audioLocked) {
       rampMaster(0, 0.25);
       return;
     }
 
-    resumeContext();
     const now = ctx.currentTime;
     const notes = win ? VICTORY : [110.0, 98.0, 87.31];
     const spacing = win ? 0.22 : 0.35;
@@ -333,10 +337,11 @@ export function createSoundtrack() {
     clearTimers();
     stopVoices(0.05);
 
-    const audio = ensureContext();
+    running = true;
+    if (!audioHidden) audioLocked = false;
+    const audio = safe(ensureContext);
     if (!audio) return;
 
-    running = true;
     resumeContext();
     rampMaster(muted ? 0 : masterTarget(), 0.05);
     if (!muted) beginPlayback();
@@ -350,8 +355,9 @@ export function createSoundtrack() {
 
   function resume() {
     if (!running || finished) return;
-    const wasPaused = paused;
+    const wasPaused = paused || audioLocked;
     paused = false;
+    if (!audioHidden) audioLocked = false;
     if (!wasPaused) return;
 
     if (muted) {
@@ -359,6 +365,7 @@ export function createSoundtrack() {
       return;
     }
 
+    safe(ensureContext);
     resumeContext();
     beginPlayback();
   }
@@ -371,14 +378,27 @@ export function createSoundtrack() {
   function setMuted(value) {
     muted = !!value;
     if (muted) {
-      haltPlayback(0.25);
+      haltPlayback(0);
+      safe(() => ctx?.suspend());
       return;
     }
+    if (!audioHidden) audioLocked = false;
     if (running && !paused && !finished) {
+      safe(ensureContext);
       resumeContext();
       rampMaster(masterTarget(), 0.45);
       if (!timers.length) beginPlayback();
     }
+  }
+
+  function setAudioHidden(value) {
+    audioHidden = !!value;
+    if (audioHidden) {
+      audioLocked = true;
+      haltPlayback(0);
+      safe(() => ctx?.suspend());
+    }
+    // Foreground visibility is not a user gesture: remain silent until resumed.
   }
 
   function finish(win = false) {
@@ -397,6 +417,7 @@ export function createSoundtrack() {
     resume,
     setLevel,
     setMuted,
+    setAudioHidden,
     finish,
   };
 }

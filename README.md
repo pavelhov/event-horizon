@@ -27,7 +27,7 @@ Open http://localhost:5187 in a desktop browser with WebGL. On macOS, you can al
 - Phone: drag to steer, or choose **Tilt** before launch or while paused.
 - Tilt mode: hold the phone comfortably to calibrate, tilt to steer, and hold the screen to boost. **Recenter** in the menu or pause screen resets neutral.
 
-Tilt is opt-in and requires usable motion sensors and a secure connection. Motion permission is requested only when selecting Tilt. If permission is denied or readings are unavailable, Touch remains available. Sensor loss during flight pauses the game and returns to Touch. Rotating the phone recalibrates the neutral position.
+Tilt is opt-in and requires usable motion sensors and a secure connection. Motion permission is requested only when selecting Tilt. If permission is denied or readings are unavailable, Touch remains available. Tilt stays tappable to retry; repeated denial reveals motion-permission help because Safari can remember Cancel and suppress its dialog. Sensor loss during flight pauses the game and returns to Touch. Rotating the phone recalibrates the neutral position.
 
 ## The run
 
@@ -47,7 +47,7 @@ Reach 122,000 points in campaign mode to trigger the final escape. Endless mode 
 
 The spacecraft and ruins are generated using Blender. Rebuild them with `scripts/blender_assets.py`; generated glTF assets and editable `.blend` files live in `public/assets`.
 
-The soundtrack, engine and effects are synthesized with WebAudio. No accounts, backend or paid services are required.
+The soundtrack, engine and effects are synthesized with WebAudio. On supporting browsers, explicit launch/resume/unmute actions request playback audio so iPhone silent mode does not suppress the game. This may pause other media apps. The sound button remembers your mute choice, and backgrounding the page silences game audio. Older browsers without Audio Session support retain their normal audio behavior. No accounts, backend or paid services are required.
 
 Ring melodies follow the soundtrack's current chord. Streaks develop through different musical phrases, with richer harmonies and milestone flourishes; gold rings add a brighter bell accent. A missed ring or damage restarts the phrase, while sector-clear cues take priority.
 

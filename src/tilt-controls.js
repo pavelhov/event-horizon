@@ -3,8 +3,9 @@
 export function createTiltControls({ onChange = () => {}, onSteer = () => {}, window: win = globalThis.window, timeoutMs = 5000 } = {}) {
   const supported = !!win?.DeviceOrientationEvent && win.isSecureContext !== false;
   let status = 'touch', message = '', generation = 0, timer, resolveEnable;
+  let deniedAttempts = 0;
   let baseline = null, latest = null, previousTime = null, x = 0, y = 0;
-  const getState = () => ({ status, message, supported });
+  const getState = () => ({ status, message, supported, showPermissionHelp: status === 'touch' && deniedAttempts >= 2 && !!message });
   const publish = () => onChange(getState());
   const neutral = () => { x = y = 0; previousTime = null; onSteer(0, 0); };
   const clearTimer = () => { win.clearTimeout(timer); timer = undefined; };
@@ -38,7 +39,7 @@ export function createTiltControls({ onChange = () => {}, onSteer = () => {}, wi
     if (!baseline || baseline.angle !== reading.angle) {
       baseline = reading;
       neutral();
-      if (status === 'requesting') { status = 'active'; message = 'Tilt to steer · hold the screen to boost'; publish(); settle(true); }
+      if (status === 'requesting') { deniedAttempts = 0; status = 'active'; message = 'Tilt to steer · hold the screen to boost'; publish(); settle(true); }
       return;
     }
     const wrap = value => ((value + 180) % 360 + 360) % 360 - 180;
@@ -68,7 +69,11 @@ export function createTiltControls({ onChange = () => {}, onSteer = () => {}, wi
     catch { stop('Motion access could not be requested. Use touch controls.'); return result; }
     Promise.resolve(permission ?? 'granted').then(value => {
       if (token !== generation) return;
-      if (value !== 'granted') { stop('Motion permission was denied. Touch controls are ready.'); return; }
+      if (value !== 'granted') {
+        deniedAttempts++;
+        stop(deniedAttempts === 1 ? 'Motion access wasn’t allowed. Tap Tilt to retry.' : 'Your browser is still denying motion access. See how to enable it below, or use Touch.');
+        return;
+      }
       message = 'Checking motion sensors… hold your phone comfortably.'; publish();
       win.addEventListener('deviceorientation', sample);
       win.addEventListener('orientationchange', rotate);

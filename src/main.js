@@ -4,10 +4,11 @@ import { levelStart } from './progression.js';
 import { loadProfile, recordRun } from './profile.js';
 import { createSoundtrack } from './soundtrack.js';
 import { createTiltControls } from './tilt-controls.js';
+import { requestPlaybackAudio, readMutedPreference, saveMutedPreference } from './audio-session.js';
 const music = createSoundtrack();
 
 const el = (id) => document.getElementById(id);
-let mode = 'loading', selectedMode = 'campaign', muted = false, game;
+let mode = 'loading', selectedMode = 'campaign', muted = readMutedPreference(), game;
 let lastEventTime = null, lastScore = 0, lastLevelEvent = null, startingFlight = false, recorded = false;
 let hullMaximum = 0, currentPhase = 'intro', choosingUpgrade = false, upgradeGeneration = 0;
 let profile = loadProfile();
@@ -33,6 +34,10 @@ function renderSteering(state) {
     button.disabled = pending || !state.supported;
     button.textContent = pending ? 'CHECKING…' : 'TILT';
     panel.querySelector('[data-recenter]').classList.toggle('hidden', !active);
+    const help = panel.querySelector('.motion-help');
+    help.classList.toggle('hidden', !state.showPermissionHelp);
+    if (!state.showPermissionHelp) help.open = false;
+    button.classList.toggle('retry-available', !pending && state.supported && !active);
     panel.querySelector('.steering-status').textContent = state.message || (active ? 'Tilt to steer · Hold the screen to boost.' : 'Drag to steer.');
   }
   if (touchDevice) {
@@ -95,6 +100,7 @@ function launch(value = selectedMode) {
   currentPhase = 'playing'; hullMaximum = 0; clearPresentation();
   startingFlight = true;
   setMode('playing');
+  if (!muted) requestPlaybackAudio();
   music.start();
   game.start({ mode: selectedMode });
   startingFlight = false;
@@ -105,7 +111,7 @@ function launch(value = selectedMode) {
 function togglePause() {
   if (currentPhase !== 'playing') return;
   if (mode === 'playing') { game.pause(); music.pause(); setMode('paused'); }
-  else if (mode === 'paused' && steeringStatus !== 'requesting') { if (steeringStatus === 'active') tilt.recenter(); game.resume(); music.resume(); setMode('playing'); }
+  else if (mode === 'paused' && steeringStatus !== 'requesting') { if (steeringStatus === 'active') tilt.recenter(); if (!muted) requestPlaybackAudio(); game.resume(); music.resume(); setMode('playing'); }
 }
 function normalized(value, fallback=1) {
   const number = Number(value);
@@ -177,6 +183,7 @@ function upgrade(data) {
       if (choosingUpgrade || mode !== 'upgrade') return;
       choosingUpgrade = true;
       for (const item of container.children) item.disabled = true;
+      if (!muted) requestPlaybackAudio();
       const accepted = game.chooseUpgrade(choice.id);
       if (!accepted) {
         choosingUpgrade = false;
@@ -231,11 +238,20 @@ el('mode-campaign').addEventListener('click', () => selectMode('campaign'));
 el('mode-endless').addEventListener('click', () => selectMode('endless'));
 el('pause').addEventListener('click', togglePause);
 el('resume').addEventListener('click', togglePause);
-el('mute').addEventListener('click', () => {
-  muted = !muted; game?.setMuted(muted); music.setMuted(muted);
+function updateSoundControl() {
   el('sound-icon').textContent = muted ? '◖×' : '◖))';
   el('mute').setAttribute('aria-label', muted ? 'Enable sound' : 'Mute sound');
   el('mute').setAttribute('aria-pressed', String(muted));
+  el('mute').title = muted ? 'Sound off — tap to enable' : 'Sound on — tap to mute';
+}
+music.setMuted(muted);
+updateSoundControl();
+el('mute').addEventListener('click', () => {
+  muted = !muted;
+  saveMutedPreference(muted);
+  if (!muted) requestPlaybackAudio();
+  game?.setMuted(muted); music.setMuted(muted);
+  updateSoundControl();
 });
 el('fullscreen').addEventListener('click', async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen(); } catch {} });
 el('reload').addEventListener('click', () => location.reload());
@@ -245,6 +261,10 @@ window.addEventListener('keydown', (event) => {
   if (event.code === 'Escape' && ['playing','paused'].includes(mode)) { event.preventDefault(); togglePause(); }
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code) && ['playing','paused','escape'].includes(mode)) event.preventDefault();
 });
-document.addEventListener('visibilitychange', () => { if (document.hidden && mode === 'playing') togglePause(); });
-try { game = createGame(el('scene'), { onReady: ready, onUpdate: update, onEnd: end, onUpgrade: upgrade, getHarmony: music.getHarmony }); }
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && mode === 'playing') togglePause();
+  game?.setAudioHidden(document.hidden);
+  music.setAudioHidden(document.hidden);
+});
+try { game = createGame(el('scene'), { onReady: ready, onUpdate: update, onEnd: end, onUpgrade: upgrade, getHarmony: music.getHarmony }); game.setMuted(muted); game.setAudioHidden(document.hidden); music.setAudioHidden(document.hidden); }
 catch (error) { console.error(error); show('intro', false); show('error-screen', true); el('error-message').textContent = 'The flight renderer could not initialize. Try a browser with WebGL enabled, then reload.'; }

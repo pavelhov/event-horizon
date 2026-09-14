@@ -91,3 +91,21 @@ test('hidden page neutralizes, returning recalibrates, lost readings disable til
   f.sample(10,25); assert.deepEqual(f.steering.at(-1), [0,0]);
   f.expire(); assert.equal(f.controls.getState().status, 'touch');
 });
+
+
+test('repeated denial requests permission again and offers help; a later grant clears it', async () => {
+  let attempts = 0;
+  const f = fixture(() => Promise.resolve(++attempts < 3 ? 'denied' : 'granted'));
+  assert.equal(await f.controls.enable(), false);
+  assert.match(f.controls.getState().message, /Tap Tilt to retry/);
+  assert.equal(f.controls.getState().showPermissionHelp, false);
+  assert.equal(await f.controls.enable(), false);
+  assert.equal(attempts, 2);
+  assert.equal(f.controls.getState().supported, true);
+  assert.equal(f.controls.getState().showPermissionHelp, true);
+  const enabled = f.controls.enable(); await f.listen(); f.sample(40, 0);
+  assert.equal(await enabled, true);
+  assert.equal(attempts, 3);
+  assert.equal(f.controls.getState().showPermissionHelp, false);
+  f.controls.destroy();
+});

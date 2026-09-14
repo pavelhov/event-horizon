@@ -183,6 +183,7 @@ export function createGame(canvas, callbacks = {}) {
   }
   function chooseUpgrade(id){
     if(state.phase!=='upgrade'||!upgradeChoices().some(choice=>choice.id===id))return false;
+    unlockAudio();ensureEngine();
     state.upgrades[id]++;
     if(id==='armor'){state.maxShield=Math.min(6,state.maxShield+1);state.shield=state.maxShield;}
     state.scoreMultiplier=1+state.upgrades.bounty*.15;
@@ -232,10 +233,14 @@ export function createGame(canvas, callbacks = {}) {
   const particles=[];const particleGeo=new THREE.SphereGeometry(.055,4,4);const particleMat=new THREE.MeshBasicMaterial({color:0x68efff});
   function burst(pos,color){for(let i=0;i<20;i++){const m=new THREE.Mesh(particleGeo,particleMat.clone());m.material.color.set(color);m.position.copy(pos);scene.add(m);particles.push({mesh:m,vel:new THREE.Vector3((Math.random()-.5)*14,(Math.random()-.5)*14,Math.random()*15),life:1});}}
   let audio, engineGain, engineOsc, engineSub;
+  let audioHidden = false, audioLocked = false;
+  function unlockAudio(){if(!audioHidden)audioLocked=false;}
+  function suspendAudio(){try{audio?.suspend()?.catch(()=>{});}catch{}}
   function ensureEngine(){
+    if(state.muted || audioHidden || audioLocked)return;
     try {
       audio ||= new (window.AudioContext||window.webkitAudioContext)();
-      if(audio.state==='suspended') audio.resume();
+      if(audio.state==='suspended'||audio.state==='interrupted') audio.resume().catch(()=>{});
       if(engineGain) return;
       engineGain=audio.createGain();engineGain.gain.value=0;
       const filter=audio.createBiquadFilter();filter.type='lowpass';filter.frequency.value=260;filter.Q.value=.5;
@@ -246,10 +251,9 @@ export function createGame(canvas, callbacks = {}) {
   }
   const celebrationVoices=new Set();
   function positiveCue(notes){
-    if(state.muted)return;
+    if(state.muted||audioHidden||audioLocked)return;
     try{
-      audio ||= new (window.AudioContext||window.webkitAudioContext)();
-      if(audio.state==='suspended')audio.resume().catch(()=>{});
+      if(!audio||audio.state!=='running')return;
       const now=audio.currentTime;
       for(const [frequency,offset,duration,volume] of notes){
         const oscillator=audio.createOscillator(),gain=audio.createGain();
@@ -285,7 +289,7 @@ export function createGame(canvas, callbacks = {}) {
     celebrationVoices.clear();
   }
   function silenceEngine(){if(engineGain)engineGain.gain.setTargetAtTime(0,audio.currentTime,.08);}
-  function sound(freq,type='sine',duration=.15,volume=.06){if(state.muted)return;try{audio ||= new (window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')audio.resume();const o=audio.createOscillator(),g=audio.createGain();o.type=type;o.frequency.setValueAtTime(freq,audio.currentTime);o.frequency.exponentialRampToValueAtTime(freq*.45,audio.currentTime+duration);g.gain.setValueAtTime(volume,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+duration);o.connect(g).connect(audio.destination);o.start();o.stop(audio.currentTime+duration);}catch{}}
+  function sound(freq,type='sine',duration=.15,volume=.06){if(state.muted||audioHidden||audioLocked)return;try{if(!audio||audio.state!=='running')return;const o=audio.createOscillator(),g=audio.createGain();o.type=type;o.frequency.setValueAtTime(freq,audio.currentTime);o.frequency.exponentialRampToValueAtTime(freq*.45,audio.currentTime+duration);g.gain.setValueAtTime(volume,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+duration);o.connect(g).connect(audio.destination);const voice={oscillator:o,gain:g};celebrationVoices.add(voice);o.onended=()=>{celebrationVoices.delete(voice);o.disconnect();g.disconnect();};o.start();o.stop(audio.currentTime+duration);}catch{}}
   function end(win=false){
     if(state.ended)return;mouseBoostHeld=false;silenceEngine();silenceCelebration();state.running=false;state.paused=false;state.ended=true;state.phase='ended';
     let best=state.score;try{best=Math.max(state.score,Number(localStorage.getItem('event-horizon-best')||0));localStorage.setItem('event-horizon-best',best);}catch{}
@@ -297,7 +301,7 @@ export function createGame(canvas, callbacks = {}) {
   function start(options={}){
     silenceCelebration();
     mouseBoostHeld=false;
-    ensureEngine();Object.assign(state,{runId:globalThis.crypto?.randomUUID?.()||`run-${Date.now()}-${Math.random()}`,running:true,paused:false,ended:false,phase:'playing',mode:options.mode==='endless'?'endless':'campaign',score:0,speed:310,combo:0,shield:3,maxShield:3,hits:0,maxCombo:0,gatesMissed:0,upgrades:{armor:0,reactor:0,bounty:0},scoreMultiplier:1,escapeProgress:0,boost:1,gates:0,distance:0,elapsed:0,levelEvent:0,levelReward:'',lastEvent:null,eventTime:0},progressionForScore(0));
+    unlockAudio();ensureEngine();Object.assign(state,{runId:globalThis.crypto?.randomUUID?.()||`run-${Date.now()}-${Math.random()}`,running:true,paused:false,ended:false,phase:'playing',mode:options.mode==='endless'?'endless':'campaign',score:0,speed:310,combo:0,shield:3,maxShield:3,hits:0,maxCombo:0,gatesMissed:0,upgrades:{armor:0,reactor:0,bounty:0},scoreMultiplier:1,escapeProgress:0,boost:1,gates:0,distance:0,elapsed:0,levelEvent:0,levelReward:'',lastEvent:null,eventTime:0},progressionForScore(0));
     pendingUpgrades=0;lastHullWarning=-10;paletteTarget.set(state.color);gateMat.color.set(state.color);gateMat.emissive.set(state.color);levelPulse=0;
     ship.position.set(0,0,2);ship.rotation.set(0,0,0);previousShipPosition.copy(ship.position);targetX=targetY=0;pointerActive=false;shake=0;invincible=1;gateSequence=9;
     for(const key in keys)keys[key]=false;
@@ -319,7 +323,7 @@ export function createGame(canvas, callbacks = {}) {
     let keyboardSteering=false;
     const escaping=state.phase==='escape';const active=state.running&&state.phase==='playing';const boosting=active&&(keys.Space||mouseBoostHeld)&&state.boost>.01;const velocity=escaping?180+state.escapeProgress*400:active?(state.baseSpeed)*(boosting?1.75:1):13;
     state.speed=active?Math.round(velocity*5):0;
-    if(engineGain){engineGain.gain.setTargetAtTime((active||escaping)&&!state.muted?(escaping?.045:boosting?.035:.02):0,audio.currentTime,.12);engineOsc.frequency.setTargetAtTime(escaping?100+state.escapeProgress*100:boosting?82:49+Math.min(state.level,10)*2,audio.currentTime,.2);engineSub.frequency.setTargetAtTime(boosting?51:36.7,audio.currentTime,.2);}
+    if(engineGain){engineGain.gain.setTargetAtTime((active||escaping)&&!state.muted&&!audioHidden&&!audioLocked?(escaping?.045:boosting?.035:.02):0,audio.currentTime,.12);engineOsc.frequency.setTargetAtTime(escaping?100+state.escapeProgress*100:boosting?82:49+Math.min(state.level,10)*2,audio.currentTime,.2);engineSub.frequency.setTargetAtTime(boosting?51:36.7,audio.currentTime,.2);}
     if(active){state.elapsed+=dt;state.distance+=velocity*dt;state.boost=THREE.MathUtils.clamp(state.boost+(boosting?-.31:.14*(1+.25*state.upgrades.reactor))*dt,0,1);invincible=Math.max(0,invincible-dt);
       const keyX=(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0),keyY=(keys.KeyW||keys.ArrowUp?1:0)-(keys.KeyS||keys.ArrowDown?1:0);
       keyboardSteering=!!(keyX||keyY);
@@ -426,7 +430,7 @@ flames.forEach(f=>{f.scale.y=(boosting?2.2:1)+Math.random()*.25;});
     if(time-lastUI>.09){publish();lastUI=time;}composer.render();if(escaping&&state.escapeProgress>=1)end(true);
   }
   function returnToMenu(){mouseBoostHeld=false;state.running=false;state.paused=false;state.ended=false;state.phase='intro';ship.position.set(0,0,2);pointerActive=false;invincible=0;renderer.toneMappingExposure=1.15;silenceEngine();silenceCelebration();publish();}
-  const api={start,chooseUpgrade,returnToMenu,setTiltMode(value){tiltMode=!!value;pointerActive=false;mouseBoostHeld=false;tiltNDC.set(0,0);},setTiltInput(x,y){if(!Number.isFinite(x)||!Number.isFinite(y))return;tiltNDC.set(THREE.MathUtils.clamp(x,-1,1),THREE.MathUtils.clamp(y,-1,1));},pause(){mouseBoostHeld=false;if(state.phase!=='playing')return;state.paused=true;silenceEngine();silenceCelebration();publish();},resume(){if(state.phase!=='playing')return;state.paused=false;clock.getDelta();publish();},setMuted(value){state.muted=!!value;if(state.muted){silenceEngine();silenceCelebration();}}};
+  const api={start,chooseUpgrade,returnToMenu,setTiltMode(value){tiltMode=!!value;pointerActive=false;mouseBoostHeld=false;tiltNDC.set(0,0);},setTiltInput(x,y){if(!Number.isFinite(x)||!Number.isFinite(y))return;tiltNDC.set(THREE.MathUtils.clamp(x,-1,1),THREE.MathUtils.clamp(y,-1,1));},pause(){mouseBoostHeld=false;if(state.phase!=='playing')return;state.paused=true;silenceEngine();silenceCelebration();publish();},resume(){if(state.phase!=='playing')return;unlockAudio();ensureEngine();state.paused=false;clock.getDelta();publish();},setAudioHidden(value){audioHidden=!!value;if(audioHidden){audioLocked=true;silenceEngine();silenceCelebration();suspendAudio();}},setMuted(value){state.muted=!!value;if(state.muted){silenceEngine();silenceCelebration();suspendAudio();}else{unlockAudio();if(state.running&&!state.paused)ensureEngine();}}};
   window.__game.api=api;window.__game.sweptSolidContact=sweptSolidContact;window.__game.damage=damage;
   tick();callbacks.onReady?.();
   return api;
