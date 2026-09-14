@@ -1,4 +1,6 @@
 import './style.css';
+import { createIcon, initializeIcons } from './icons.js';
+initializeIcons();
 import { createGame } from './game.js';
 import { levelStart } from './progression.js';
 import { loadProfile, recordRun } from './profile.js';
@@ -152,7 +154,9 @@ function update(data) {
   el('shield').setAttribute('aria-label', `${shield} of ${maxShield} hull points`);
   const critical = shield <= 1 && mode === 'playing', protectedNow = data.invincible > 0;
   document.body.classList.toggle('hull-critical', critical);
-  el('hull-condition').textContent = protectedNow ? '◈ SHIELD ACTIVE' : critical ? '⚠ CRITICAL — AVOID DEBRIS' : 'HULL STABLE';
+  el('hull-condition-label').textContent = protectedNow ? 'SHIELD ACTIVE' : critical ? 'CRITICAL — AVOID DEBRIS' : 'HULL STABLE';
+  el('hull-condition').querySelector('[data-icon="shield"]').classList.toggle('hidden', !protectedNow);
+  el('hull-condition').querySelector('[data-icon="warning"]').classList.toggle('hidden', protectedNow || !critical);
   el('hull-condition').classList.toggle('protected', protectedNow);
   el('boost').style.width = `${normalized(data.boost) * 100}%`;
   el('progress').style.width = `${normalized(data.progress, 0) * 100}%`;
@@ -162,7 +166,9 @@ function update(data) {
   const remaining = Math.max(0, (Number(data.nextLevelScore) || levelStart(2)) - (Number(data.score) || 0));
   const finalSector = (data.mode || selectedMode) === 'campaign' && level >= 6;
   el('level-remaining').textContent = `${Math.ceil(remaining).toLocaleString()} TO ${finalSector ? 'ESCAPE' : 'NEXT SECTOR'}`;
-  el('level-target').textContent = finalSector ? '↗ EXIT' : `→ ${String(level + 1).padStart(2, '0')}`;
+  el('level-target-label').textContent = finalSector ? 'EXIT' : String(level + 1).padStart(2, '0');
+  el('level-target').querySelector('[data-icon="forward"]').classList.toggle('hidden', finalSector);
+  el('level-target').querySelector('[data-icon="arrow"]').classList.toggle('hidden', !finalSector);
   el('level-hint').textContent = data.levelHint || 'Thread gates. Build your streak.';
 }
 function upgrade(data) {
@@ -171,13 +177,13 @@ function upgrade(data) {
   el('upgrade-sector').textContent = `${String(data.level).padStart(2,'0')} / ${data.levelName}`;
   el('upgrade-reward').textContent = data.reward || 'SHIP SYSTEMS RESTORED';
   const container = el('upgrade-choices'); container.replaceChildren();
-  const icons = { armor: '◇', reactor: 'ϟ', bounty: '✧' };
+  const icons = { armor: 'shield', reactor: 'reactor', bounty: 'sparkle' };
   for (const choice of data.choices || []) {
     const button = document.createElement('button'); button.className = 'upgrade-card';
-    const icon = document.createElement('span'); icon.className = 'upgrade-icon'; icon.textContent = icons[choice.id] || '✦';
+    const icon = document.createElement('span'); icon.className = 'upgrade-icon'; icon.append(createIcon(icons[choice.id] || 'sparkle'));
     const name = document.createElement('strong'); name.textContent = choice.name;
     const description = document.createElement('span'); description.className = 'upgrade-description'; description.textContent = choice.description;
-    const select = document.createElement('span'); select.className = 'upgrade-select'; select.textContent = 'INSTALL UPGRADE ↗';
+    const select = document.createElement('span'); select.className = 'upgrade-select'; select.append('INSTALL UPGRADE', createIcon('arrow'));
     button.append(icon, name, description, select);
     button.addEventListener('click', () => {
       if (choosingUpgrade || mode !== 'upgrade') return;
@@ -239,7 +245,7 @@ el('mode-endless').addEventListener('click', () => selectMode('endless'));
 el('pause').addEventListener('click', togglePause);
 el('resume').addEventListener('click', togglePause);
 function updateSoundControl() {
-  el('sound-icon').textContent = muted ? '◖×' : '◖))';
+  el('sound-icon').replaceChildren(createIcon(muted ? 'muted' : 'sound'));
   el('mute').setAttribute('aria-label', muted ? 'Enable sound' : 'Mute sound');
   el('mute').setAttribute('aria-pressed', String(muted));
   el('mute').title = muted ? 'Sound off — tap to enable' : 'Sound on — tap to mute';

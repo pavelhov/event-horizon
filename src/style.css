@@ -37,3 +37,23 @@ svg.button-arrow{display:block;width:24px;height:24px;flex:0 0 24px}
 .motion-help{margin-top:10px;font-size:11px;line-height:1.6;color:#c5d1d3}
 .motion-help summary{cursor:pointer;color:var(--cyan);padding:8px 0;text-decoration:underline;text-underline-offset:3px}
 .steering-settings .motion-help p{font-size:11px;line-height:1.6;margin:8px 0;color:#c5d1d3}
+
+/* Outline icons share one stroke and never depend on emoji-capable fonts. */
+.ui-icon{display:block;width:1em;height:1em;flex:none;pointer-events:none}
+[data-icon],#sound-icon{display:inline-flex;align-items:center;justify-content:center;flex:none}
+.icon-button{display:inline-flex;align-items:center;justify-content:center;padding:3px}
+.icon-button .ui-icon{width:22px;height:22px}
+.button-with-icon,.upgrade-select{display:flex;align-items:center;justify-content:center;gap:8px}
+.button-with-icon .ui-icon,.upgrade-select .ui-icon{width:16px;height:16px}
+.primary-button [data-icon] .ui-icon{width:24px;height:24px}
+.upgrade-select{justify-content:flex-start}
+.upgrade-icon .ui-icon{width:1em;height:1em}
+.hull-condition,#level-target{display:flex;align-items:center;gap:5px}
+.hull-condition .ui-icon{width:11px;height:11px}
+#level-target .ui-icon{width:12px;height:12px}
+#pause{display:flex;align-items:center;justify-content:flex-end;gap:7px}
+#pause .ui-icon{width:14px;height:14px}
+.tiny-cross{vertical-align:middle}
+.tiny-cross .ui-icon{width:9px;height:9px}
+
+@media(max-width:700px){.fullscreen-button{display:none}}
