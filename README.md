@@ -4,6 +4,10 @@ A cinematic spaceflight arcade game built with Three.js and Blender assets. Fly 
 
 ## Play
 
+[Play Event Horizon](https://eventhorizon.pavelhov.com) in your desktop browser.
+
+### Run locally
+
 Use Node.js 22.12 or newer (Node.js 24 is recommended).
 
 ```sh
