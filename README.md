@@ -4,6 +4,8 @@ A cinematic spaceflight arcade game built with Three.js and Blender assets. Fly 
 
 ## Play
 
+Use Node.js 22.12 or newer (Node.js 24 is recommended).
+
 ```sh
 npm install
 npm run dev -- --port 5187
@@ -47,6 +49,42 @@ Ring melodies follow the soundtrack's current chord. Streaks develop through dif
 npm run build
 npm run preview
 ```
+
+## Deployment
+
+Cloudflare Workers serves the Vite build in `dist` at
+[eventhorizon.pavelhov.com](https://eventhorizon.pavelhov.com).
+The worker name, assets directory, and custom domain are defined in `wrangler.jsonc`.
+
+Connect this repository to the `event-horizon` Worker under **Settings → Builds**
+with these settings:
+
+| Setting | Value |
+| --- | --- |
+| Production branch | `main` |
+| Root directory | `/` (repository root) |
+| Build command | `npm run build` |
+| Deploy command | `npm run deploy` |
+| Build environment variable | `NODE_VERSION=24` |
+
+Enable automatic builds for `main`. Cloudflare installs the locked npm dependencies
+before the build. Each push to `main` then builds and deploys the game. Keep the
+Cloudflare Worker name equal to the name in `wrangler.jsonc`.
+
+For a local deployment, authenticate Wrangler to the Cloudflare account that owns
+the `pavelhov.com` zone, then run:
+
+```sh
+npm ci
+npm test
+npm run build
+npm run deploy -- --dry-run
+npm run deploy
+```
+
+The custom domain configuration lets Cloudflare manage the hostname's DNS and
+certificate. See the official [Workers Builds configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/)
+and [custom domains documentation](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/).
 
 ## Pacing research and verification
 
